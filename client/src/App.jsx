@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ChatMessage from './components/ChatMessage.jsx';
-import { sendChat } from './api.js';
+import { sendChatStream } from './api.js';
 
 const SUGGESTIONS = [
   'What is React Context?',
@@ -28,11 +28,34 @@ export default function App() {
     setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
     setLoading(true);
     try {
-      const { answer, sources, refused } = await sendChat(trimmed);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: answer, sources, refused },
-      ]);
+      await sendChatStream(trimmed, {
+        onSources: (sources) => {
+          setMessages((prev) => [
+            ...prev,
+            { role: 'assistant', content: '', sources, refused: false },
+          ]);
+        },
+        onRefused: () => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              next[next.length - 1] = { ...last, refused: true };
+            }
+            return next;
+          });
+        },
+        onToken: (token) => {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last?.role === 'assistant') {
+              next[next.length - 1] = { ...last, content: last.content + token };
+            }
+            return next;
+          });
+        },
+      });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -65,7 +88,7 @@ export default function App() {
           <ChatMessage key={i} message={m} />
         ))}
 
-        {loading ? (
+        {loading && messages[messages.length - 1]?.role === 'user' ? (
           <div className="message message--assistant">
             <div className="message__role">Assistant</div>
             <div className="message__content typing">Thinking…</div>

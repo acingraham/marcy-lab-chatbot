@@ -64,3 +64,16 @@ export async function generateAnswer(question, chunks) {
   });
   return completion.choices[0].message.content;
 }
+
+export async function* generateAnswerStream(question, chunks) {
+  const stream = await openai.chat.completions.create({
+    model: CHAT_MODEL,
+    messages: buildMessages(question, chunks),
+    temperature: 0.2,
+    stream: true,
+  });
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}

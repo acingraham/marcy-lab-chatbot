@@ -3,7 +3,7 @@ import { query } from '../db.js';
 import {
   embedQuery,
   retrieveChunks,
-  generateAnswer,
+  generateAnswerStream,
   REFUSAL_THRESHOLD,
   REFUSAL_MESSAGE,
 } from '../rag.js';
@@ -18,41 +18,69 @@ router.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'message (string) is required' });
   }
 
+  let headersSent = false;
+  let fullAnswer = '';
+  let wasRefused = false;
+  let sources = [];
+
   try {
     const embedding = await embedQuery(message);
     const chunks = await retrieveChunks(embedding);
     const topScore = chunks[0]?.similarity ?? 0;
 
-    let answer;
-    let wasRefused = false;
-
-    if (topScore < REFUSAL_THRESHOLD) {
-      wasRefused = true;
-      answer = REFUSAL_MESSAGE;
-    } else {
-      answer = await generateAnswer(message, chunks);
-    }
-
-    const sources = chunks.map((c) => ({
+    sources = chunks.map((c) => ({
       source_path: c.source_path,
       title: c.title,
       heading: c.heading,
       similarity: Number(c.similarity.toFixed(4)),
     }));
 
-    const latencyMs = Date.now() - start;
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    headersSent = true;
 
-    await query(
-      `INSERT INTO chat_logs
-         (query, response, retrieved_sources, latency_ms, was_refused)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [message, answer, JSON.stringify(sources), latencyMs, wasRefused],
-    );
+    const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
-    res.json({ answer, sources, refused: wasRefused });
+    send({ type: 'sources', sources });
+
+    if (topScore < REFUSAL_THRESHOLD) {
+      wasRefused = true;
+      fullAnswer = REFUSAL_MESSAGE;
+      send({ type: 'refused' });
+      send({ type: 'token', content: REFUSAL_MESSAGE });
+    } else {
+      for await (const delta of generateAnswerStream(message, chunks)) {
+        fullAnswer += delta;
+        send({ type: 'token', content: delta });
+      }
+    }
+
+    send({ type: 'done' });
+    res.end();
   } catch (err) {
     console.error('Chat error:', err);
-    res.status(500).json({ error: 'Internal error' });
+    if (!headersSent) {
+      return res.status(500).json({ error: 'Internal error' });
+    }
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Internal error during generation' })}\n\n`);
+    res.end();
+  } finally {
+    if (headersSent) {
+      const latencyMs = Date.now() - start;
+      try {
+        await query(
+          `INSERT INTO chat_logs
+             (query, response, retrieved_sources, latency_ms, was_refused)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [message, fullAnswer, JSON.stringify(sources), latencyMs, wasRefused],
+        );
+      } catch (logErr) {
+        console.error('Failed to log chat:', logErr);
+      }
+    }
   }
 });
 
