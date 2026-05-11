@@ -9,53 +9,94 @@ const SUGGESTIONS = [
   'Explain promises',
 ];
 
+const STORAGE_KEY = 'marcy-chat-messages-v1';
+const HISTORY_TURNS = 6;
+
+function loadStoredMessages() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function App() {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(loadStoredMessages);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+    } catch {
+      // Quota exceeded or storage disabled; ignore.
+    }
+  }, [messages]);
+
+  useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
+
+  function clearConversation() {
+    setMessages([]);
+    setError(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
+  }
 
   async function submit(text) {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
     setError(null);
     setInput('');
+
+    const history = messages
+      .slice(-HISTORY_TURNS)
+      .map((m) => ({ role: m.role, content: m.content }));
+
     setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
     setLoading(true);
     try {
-      await sendChatStream(trimmed, {
-        onSources: (sources) => {
-          setMessages((prev) => [
-            ...prev,
-            { role: 'assistant', content: '', sources, refused: false },
-          ]);
+      await sendChatStream(
+        trimmed,
+        {
+          onSources: (sources) => {
+            setMessages((prev) => [
+              ...prev,
+              { role: 'assistant', content: '', sources, refused: false },
+            ]);
+          },
+          onRefused: () => {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = { ...last, refused: true };
+              }
+              return next;
+            });
+          },
+          onToken: (token) => {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = { ...last, content: last.content + token };
+              }
+              return next;
+            });
+          },
         },
-        onRefused: () => {
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last?.role === 'assistant') {
-              next[next.length - 1] = { ...last, refused: true };
-            }
-            return next;
-          });
-        },
-        onToken: (token) => {
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last?.role === 'assistant') {
-              next[next.length - 1] = { ...last, content: last.content + token };
-            }
-            return next;
-          });
-        },
-      });
+        history,
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -66,8 +107,22 @@ export default function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <h1>Marcy Lab Study Assistant</h1>
-        <p>Ask anything covered by the Marcy curriculum.</p>
+        <div className="app__header-row">
+          <div>
+            <h1>Marcy Lab Study Assistant</h1>
+            <p>Ask anything covered by the Marcy curriculum.</p>
+          </div>
+          {messages.length > 0 ? (
+            <button
+              type="button"
+              className="header-action"
+              onClick={clearConversation}
+              disabled={loading}
+            >
+              New chat
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <main className="app__main">
@@ -110,7 +165,7 @@ export default function App() {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about the Marcy curriculum…"
+          placeholder="Ask a question about the curriculum…"
           disabled={loading}
           autoFocus
         />

@@ -38,6 +38,12 @@ html, body, #root {
   padding: 24px 0 12px;
   border-bottom: 1px solid var(--border);
 }
+.app__header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
 .app__header h1 {
   margin: 0;
   font-size: 22px;
@@ -46,6 +52,24 @@ html, body, #root {
   margin: 4px 0 0;
   color: var(--fg-muted);
   font-size: 14px;
+}
+.header-action {
+  background: transparent;
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.header-action:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+.header-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .app__main {

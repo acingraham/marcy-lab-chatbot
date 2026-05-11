@@ -1,8 +1,8 @@
-export async function sendChatStream(message, handlers) {
+export async function sendChatStream(message, handlers, history = []) {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, history }),
   });
 
   if (!res.ok) {
@@ -31,6 +31,9 @@ export async function sendChatStream(message, handlers) {
         continue;
       }
       switch (event.type) {
+        case 'rewritten':
+          handlers.onRewritten?.(event.query);
+          break;
         case 'sources':
           handlers.onSources?.(event.sources);
           break;

@@ -15,18 +15,23 @@ takes ~30s to wake the service — subsequent requests are fast.)*
 ## What the app does
 
 To the user, the experience is a normal chatbot. Under the hood, every message goes
-through a five-step pipeline:
+through a six-step pipeline:
 
-1. **Embed** the question with OpenAI `text-embedding-3-small`.
-2. **Retrieve** the top 5 nearest document chunks from Postgres via pgvector cosine
+1. **Rewrite** the query if there's conversation history. A short `gpt-4o-mini` call
+   resolves follow-up references like *"how is that different from props?"* into a
+   standalone search query (*"how is React Context different from props?"*) before
+   retrieval. Without this, the embedding for "that" retrieves noise.
+2. **Embed** the (rewritten) question with OpenAI `text-embedding-3-small`.
+3. **Retrieve** the top 5 nearest document chunks from Postgres via pgvector cosine
    similarity.
-3. **Gate**: if the top chunk's similarity is below 0.3, refuse with a canonical message
+4. **Gate**: if the top chunk's similarity is below 0.3, refuse with a canonical message
    and skip the LLM call entirely. This is the primary defense against off-topic
    questions and prompt injection.
-4. **Generate** an answer with `gpt-4o-mini`, passing the retrieved chunks as context and
-   a system prompt that constrains the model to Marcy curriculum content. Tokens are
-   streamed back over Server-Sent Events as they're produced.
-5. **Log** the query, response, retrieved chunks (with similarity scores), latency, and
+5. **Generate** an answer with `gpt-4o-mini`, passing the retrieved chunks plus the
+   recent conversation history as context and a system prompt that constrains the
+   model to Marcy curriculum content. Tokens are streamed back over Server-Sent
+   Events as they're produced.
+6. **Log** the query, response, retrieved chunks (with similarity scores), latency, and
    refusal flag to a `chat_logs` table after the stream completes.
 
 The UI renders answers as markdown (bold, lists, syntax-highlighted code blocks) and
@@ -365,17 +370,18 @@ The MVP intentionally cut a number of features to ship in a day. Ranked roughly 
 value-per-effort:
 
 - **Incremental ingestion**: hash each chunk's content and skip unchanged hashes on
-  re-ingest. Today the script truncates and re-embeds everything. Cheap for ~1.5k
+  re-ingest. Today the script truncates and re-embeds everything. Cheap for ~1.3k
   chunks; matters at 10k+.
-- **Conversation memory**: the server is single-turn. Follow-ups like _"how is that
-  different from props?"_ retrieve poorly without query rewriting. The right
-  implementation is an LLM-based query rewriter that combines the latest message with
-  recent history before embedding.
 - **Admin UI**: the `/api/admin/logs` JSON endpoint is the data layer. A small React
   page showing recent queries, retrieved chunks, and refusal rate would close the loop
   for evaluating retrieval quality without curling.
-- **Eval suite**: a script of canonical Q&A pairs that runs against the live retrieval
-  pipeline and asserts top-k contains expected source paths. Currently ad-hoc.
+- **Reranking**: after retrieving the top 10 by cosine similarity, use a cross-encoder
+  or an LLM-based reranker to re-order them by direct relevance to the question.
+  Improves precision when the top embeddings are all roughly similar but not all
+  equally on-point.
+- **Hybrid retrieval**: combine vector search with BM25 keyword matching. Vector
+  search captures meaning; BM25 catches exact-token queries (function names, error
+  messages). Reciprocal rank fusion combines them.
 - **ANN index**: once the corpus passes ~10k chunks, restore an `ivfflat` or `hnsw`
   index. Sequential scan is fine at the current size and produces exact results.
 

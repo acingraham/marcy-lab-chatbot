@@ -4,6 +4,7 @@ import {
   embedQuery,
   retrieveChunks,
   generateAnswerStream,
+  rewriteQuery,
   REFUSAL_THRESHOLD,
   REFUSAL_MESSAGE,
 } from '../rag.js';
@@ -13,6 +14,7 @@ export const router = express.Router();
 router.post('/chat', async (req, res) => {
   const start = Date.now();
   const message = req.body?.message;
+  const history = Array.isArray(req.body?.history) ? req.body.history : [];
 
   if (typeof message !== 'string' || !message.trim()) {
     return res.status(400).json({ error: 'message (string) is required' });
@@ -22,9 +24,14 @@ router.post('/chat', async (req, res) => {
   let fullAnswer = '';
   let wasRefused = false;
   let sources = [];
+  let searchQuery = message;
 
   try {
-    const embedding = await embedQuery(message);
+    if (history.length > 0) {
+      searchQuery = await rewriteQuery(history, message);
+    }
+
+    const embedding = await embedQuery(searchQuery);
     const chunks = await retrieveChunks(embedding);
     const topScore = chunks[0]?.similarity ?? 0;
 
@@ -44,6 +51,9 @@ router.post('/chat', async (req, res) => {
 
     const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
+    if (searchQuery !== message) {
+      send({ type: 'rewritten', query: searchQuery });
+    }
     send({ type: 'sources', sources });
 
     if (topScore < REFUSAL_THRESHOLD) {
@@ -52,7 +62,7 @@ router.post('/chat', async (req, res) => {
       send({ type: 'refused' });
       send({ type: 'token', content: REFUSAL_MESSAGE });
     } else {
-      for await (const delta of generateAnswerStream(message, chunks)) {
+      for await (const delta of generateAnswerStream(message, chunks, history)) {
         fullAnswer += delta;
         send({ type: 'token', content: delta });
       }

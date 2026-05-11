@@ -47,30 +47,66 @@ export async function retrieveChunks(embedding, limit = TOP_K) {
   return rows.map((r) => ({ ...r, similarity: Number(r.similarity) }));
 }
 
-function buildMessages(question, chunks) {
+function buildMessages(question, chunks, history = []) {
   const context = chunks.map((c) => c.content).join('\n\n---\n\n');
-  return [
-    { role: 'system', content: SYSTEM_PROMPT },
-    {
-      role: 'user',
-      content: `Marcy Docs context:\n\n${context}\n\nQuestion: ${question}`,
-    },
-  ];
+  const messages = [{ role: 'system', content: SYSTEM_PROMPT }];
+  for (const m of history.slice(-6)) {
+    if (m?.role === 'user' || m?.role === 'assistant') {
+      messages.push({ role: m.role, content: String(m.content ?? '') });
+    }
+  }
+  messages.push({
+    role: 'user',
+    content: `Marcy Docs context for this question:\n\n${context}\n\nQuestion: ${question}`,
+  });
+  return messages;
 }
 
-export async function generateAnswer(question, chunks) {
+const REWRITE_SYSTEM_PROMPT = `Given a conversation between a Marcy student and an assistant, rewrite the student's latest message as a standalone search query suitable for a vector database lookup against the Marcy curriculum. Resolve pronouns and references to prior turns. If the latest message is already a standalone query, return it unchanged. Return ONLY the rewritten query — no quotes, no preamble, no explanation.`;
+
+export async function rewriteQuery(history, currentQuery) {
+  if (!history?.length) return currentQuery;
+  const recent = history.slice(-6).filter(
+    (m) => m?.role === 'user' || m?.role === 'assistant',
+  );
+  if (recent.length === 0) return currentQuery;
+
+  const transcript = recent
+    .map(
+      (m) => `${m.role === 'user' ? 'Student' : 'Assistant'}: ${String(m.content ?? '')}`,
+    )
+    .join('\n\n');
+
   const completion = await openai.chat.completions.create({
     model: CHAT_MODEL,
-    messages: buildMessages(question, chunks),
+    messages: [
+      { role: 'system', content: REWRITE_SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `${transcript}\n\nStudent (latest): ${currentQuery}\n\nStandalone search query:`,
+      },
+    ],
+    temperature: 0,
+    max_tokens: 200,
+  });
+
+  const rewritten = completion.choices[0]?.message?.content?.trim();
+  return rewritten || currentQuery;
+}
+
+export async function generateAnswer(question, chunks, history = []) {
+  const completion = await openai.chat.completions.create({
+    model: CHAT_MODEL,
+    messages: buildMessages(question, chunks, history),
     temperature: 0.2,
   });
   return completion.choices[0].message.content;
 }
 
-export async function* generateAnswerStream(question, chunks) {
+export async function* generateAnswerStream(question, chunks, history = []) {
   const stream = await openai.chat.completions.create({
     model: CHAT_MODEL,
-    messages: buildMessages(question, chunks),
+    messages: buildMessages(question, chunks, history),
     temperature: 0.2,
     stream: true,
   });
