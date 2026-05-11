@@ -4,6 +4,7 @@ import {
   embedQuery,
   retrieveChunks,
   generateAnswerStream,
+  generateFollowUps,
   rewriteQuery,
   REFUSAL_THRESHOLD,
   REFUSAL_MESSAGE,
@@ -65,6 +66,10 @@ router.post('/chat', async (req, res) => {
       for await (const delta of generateAnswerStream(message, chunks, history)) {
         fullAnswer += delta;
         send({ type: 'token', content: delta });
+      }
+      const followUps = await generateFollowUps(message, fullAnswer);
+      if (followUps.length) {
+        send({ type: 'follow_ups', questions: followUps });
       }
     }
 

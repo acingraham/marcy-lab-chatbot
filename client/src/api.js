@@ -43,6 +43,9 @@ export async function sendChatStream(message, handlers, history = []) {
         case 'token':
           handlers.onToken?.(event.content);
           break;
+        case 'follow_ups':
+          handlers.onFollowUps?.(event.questions);
+          break;
         case 'done':
           handlers.onDone?.();
           break;

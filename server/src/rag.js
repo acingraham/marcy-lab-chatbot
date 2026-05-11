@@ -115,3 +115,38 @@ export async function* generateAnswerStream(question, chunks, history = []) {
     if (delta) yield delta;
   }
 }
+
+const FOLLOW_UPS_SYSTEM_PROMPT = `Given a student's question and the assistant's answer, suggest exactly 3 follow-up questions a curious Marcy Lab student might ask next. Each follow-up should:
+- be related to the topic but explore a different angle or a deeper concept
+- be standalone (no pronouns or references to "this")
+- be under 80 characters
+- be phrased the way a student would actually ask it
+
+Return ONLY a JSON array of exactly 3 strings — no preamble, no markdown fences, no keys.
+Example: ["What is X?", "How does Y differ from Z?", "When should I use W?"]`;
+
+export async function generateFollowUps(question, answer) {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: CHAT_MODEL,
+      messages: [
+        { role: 'system', content: FOLLOW_UPS_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `Question: ${question}\n\nAnswer: ${answer}`,
+        },
+      ],
+      temperature: 0.4,
+      max_tokens: 200,
+    });
+    const text = completion.choices[0]?.message?.content?.trim() ?? '';
+    const cleaned = text.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((s) => typeof s === 'string').slice(0, 3);
+    }
+  } catch {
+    // Swallow — follow-ups are nice-to-have, not critical.
+  }
+  return [];
+}

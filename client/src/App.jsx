@@ -94,6 +94,16 @@ export default function App() {
               return next;
             });
           },
+          onFollowUps: (questions) => {
+            setMessages((prev) => {
+              const next = [...prev];
+              const last = next[next.length - 1];
+              if (last?.role === 'assistant') {
+                next[next.length - 1] = { ...last, followUps: questions };
+              }
+              return next;
+            });
+          },
         },
         history,
       );
@@ -140,7 +150,7 @@ export default function App() {
         ) : null}
 
         {messages.map((m, i) => (
-          <ChatMessage key={i} message={m} />
+          <ChatMessage key={i} message={m} onFollowUp={submit} />
         ))}
 
         {loading && messages[messages.length - 1]?.role === 'user' ? (
