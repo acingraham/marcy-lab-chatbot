@@ -42,25 +42,37 @@ can see exactly which Marcy docs informed the response.
 
 ## Architecture
 
-```
-┌──────────────┐     POST /api/chat      ┌──────────────────────────────┐
-│  React + Vite│ ──────────────────────► │  Express                     │
-│  (client/)   │ ◄────────────────────── │  (server/src/)               │
-└──────────────┘   { answer, sources }   │                              │
-                                          │  • embedQuery (OpenAI)       │
-                                          │  • retrieveChunks (pgvector) │
-                                          │  • refusal gate              │
-                                          │  • generateAnswer (OpenAI)   │
-                                          │  • log to chat_logs          │
-                                          └────────────┬─────────────────┘
-                                                       │
-                                                       │ SQL
-                                                       ▼
-                                          ┌──────────────────────────────┐
-                                          │  Postgres + pgvector (Neon)  │
-                                          │  • document_chunks (vectors) │
-                                          │  • chat_logs (observability) │
-                                          └──────────────────────────────┘
+```mermaid
+sequenceDiagram
+  actor User
+  participant UI as React + Vite
+  participant API as Express
+  participant DB as Postgres + pgvector
+  participant LLM as OpenAI
+
+  User->>UI: types question
+  UI->>API: POST /api/chat<br/>{ message, history }
+  opt history is non-empty
+    API->>LLM: rewrite to standalone query<br/>(gpt-4o-mini)
+    LLM-->>API: rewritten query
+  end
+  API->>LLM: embed query<br/>(text-embedding-3-small)
+  LLM-->>API: 1536-dim vector
+  API->>DB: cosine similarity<br/>SELECT ... ORDER BY embedding <=> $1
+  DB-->>API: top-5 chunks + scores
+  alt top similarity < 0.3
+    API-->>UI: SSE: refused + canonical message
+  else
+    API-->>UI: SSE: sources event
+    API->>LLM: chat completion (stream=true)<br/>(gpt-4o-mini)
+    LLM-->>API: token stream
+    API-->>UI: SSE: token events
+    API->>LLM: generate 3 follow-ups<br/>(gpt-4o-mini)
+    LLM-->>API: questions
+    API-->>UI: SSE: follow_ups event
+  end
+  API-->>UI: SSE: done
+  API->>DB: INSERT chat_logs<br/>(query, response, sources, latency, refused)
 ```
 
 **Single deploy target.** In production, Express serves both the API and the built React
