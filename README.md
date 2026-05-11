@@ -24,12 +24,14 @@ through a five-step pipeline:
    and skip the LLM call entirely. This is the primary defense against off-topic
    questions and prompt injection.
 4. **Generate** an answer with `gpt-4o-mini`, passing the retrieved chunks as context and
-   a system prompt that constrains the model to Marcy curriculum content.
+   a system prompt that constrains the model to Marcy curriculum content. Tokens are
+   streamed back over Server-Sent Events as they're produced.
 5. **Log** the query, response, retrieved chunks (with similarity scores), latency, and
-   refusal flag to a `chat_logs` table.
+   refusal flag to a `chat_logs` table after the stream completes.
 
-The UI shows each answer's sources in a collapsible panel with similarity scores so the
-user can see exactly which Marcy docs informed the response.
+The UI renders answers as markdown (bold, lists, syntax-highlighted code blocks) and
+shows each answer's sources in a collapsible panel with similarity scores so the user
+can see exactly which Marcy docs informed the response.
 
 ---
 
@@ -362,11 +364,6 @@ marcy-lab-chatbot/
 The MVP intentionally cut a number of features to ship in a day. Ranked roughly by
 value-per-effort:
 
-- **Streaming responses**: `gpt-4o-mini` supports SSE streaming. The UI already has a
-  loading state — wiring streaming would feel much more responsive.
-- **Markdown rendering in the UI**: answers contain `**bold**` and triple-backtick code
-  blocks; currently shown as raw text. Adding `react-markdown` would noticeably improve
-  perceived quality.
 - **Incremental ingestion**: hash each chunk's content and skip unchanged hashes on
   re-ingest. Today the script truncates and re-embeds everything. Cheap for ~1.5k
   chunks; matters at 10k+.
