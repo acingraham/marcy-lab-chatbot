@@ -182,6 +182,14 @@ html, body, #root {
   border-radius: 4px;
   font-size: 12px;
 }
+.sources a {
+  color: inherit;
+  text-decoration: none;
+}
+.sources a:hover code {
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--accent);
+}
 
 .error {
   color: #fca5a5;

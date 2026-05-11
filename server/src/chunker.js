@@ -97,6 +97,15 @@ export function chunkMarkdown(rawContent, sourcePath) {
     });
 }
 
+function isStaleEntry(name) {
+  return (
+    name.endsWith('-old') ||
+    name === 'deprecated' ||
+    name.startsWith('deprecated-') ||
+    name.startsWith('deprecated_')
+  );
+}
+
 export function chunkAllDocs(docsRoot) {
   function walk(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -104,10 +113,12 @@ export function chunkAllDocs(docsRoot) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name.startsWith('.') || entry.name === 'node_modules') return [];
+        if (isStaleEntry(entry.name)) return [];
         return walk(full);
       }
       if (!entry.name.endsWith('.md')) return [];
       if (entry.name === 'SUMMARY.md') return [];
+      if (isStaleEntry(entry.name)) return [];
       return [full];
     });
   }
