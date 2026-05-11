@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import express from 'express';
 import { query } from './db.js';
+import { router as apiRouter } from './routes/chat.js';
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 app.get('/api/health', async (req, res) => {
   try {
@@ -13,6 +14,8 @@ app.get('/api/health', async (req, res) => {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
+
+app.use('/api', apiRouter);
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
