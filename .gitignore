@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.local
+dist/
+client/dist/
+*.log
+.DS_Store
+
+# Local working files
+marcy-study-assistant-handoff.md
+NOTES.md
+data/
