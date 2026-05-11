@@ -315,10 +315,14 @@ proof-of-concept:
 curl https://marcy-lab-chatbot.onrender.com/api/admin/logs?limit=20
 ```
 
-These logs are intended for the next iteration: evaluating retrieval quality (which
-queries returned low-similarity top results), identifying gaps in curriculum coverage
-(legitimate questions that hit the refusal threshold), and tracking latency
-distribution.
+There's also a small React admin view at **`/admin`** that renders the logs as a
+sortable, expandable table — click any row to expand the full response plus the
+ranked retrieved sources with their similarity scores. The header shows the refusal
+rate and the average latency across the visible window.
+
+These logs are intended for evaluating retrieval quality (which queries returned
+low-similarity top results), identifying gaps in curriculum coverage (legitimate
+questions that hit the refusal threshold), and tracking latency distribution.
 
 ---
 
@@ -384,9 +388,6 @@ value-per-effort:
 - **Incremental ingestion**: hash each chunk's content and skip unchanged hashes on
   re-ingest. Today the script truncates and re-embeds everything. Cheap for ~1.3k
   chunks; matters at 10k+.
-- **Admin UI**: the `/api/admin/logs` JSON endpoint is the data layer. A small React
-  page showing recent queries, retrieved chunks, and refusal rate would close the loop
-  for evaluating retrieval quality without curling.
 - **Reranking**: after retrieving the top 10 by cosine similarity, use a cross-encoder
   or an LLM-based reranker to re-order them by direct relevance to the question.
   Improves precision when the top embeddings are all roughly similar but not all

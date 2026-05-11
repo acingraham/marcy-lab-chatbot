@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ChatMessage from './components/ChatMessage.jsx';
+import AdminView from './components/AdminView.jsx';
 import { sendChatStream } from './api.js';
 
 const SUGGESTIONS = [
@@ -24,6 +25,13 @@ function loadStoredMessages() {
 }
 
 export default function App() {
+  if (typeof window !== 'undefined' && window.location.pathname === '/admin') {
+    return <AdminView />;
+  }
+  return <ChatApp />;
+}
+
+function ChatApp() {
   const [messages, setMessages] = useState(loadStoredMessages);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
