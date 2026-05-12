@@ -1,7 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-
-const DOCS_BASE =
-  'https://github.com/The-Marcy-Lab-School/marcy-curriculum-docs/blob/main';
+import { toGitbookUrl } from '../lib/docs.js';
 
 function formatTime(iso) {
   try {
@@ -133,7 +131,7 @@ export default function AdminView() {
                                   {(s.similarity * 100).toFixed(0)}%
                                 </span>{' '}
                                 <a
-                                  href={`${DOCS_BASE}/${s.source_path}`}
+                                  href={toGitbookUrl(s.source_path)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                 >

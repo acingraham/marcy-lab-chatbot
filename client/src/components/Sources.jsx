@@ -1,5 +1,4 @@
-const DOCS_BASE =
-  'https://github.com/The-Marcy-Lab-School/marcy-curriculum-docs/blob/main';
+import { toGitbookUrl } from '../lib/docs.js';
 
 export default function Sources({ sources }) {
   if (!sources?.length) return null;
@@ -11,7 +10,7 @@ export default function Sources({ sources }) {
           <li key={i}>
             <span className="similarity">{(s.similarity * 100).toFixed(0)}%</span>{' '}
             <a
-              href={`${DOCS_BASE}/${s.source_path}`}
+              href={toGitbookUrl(s.source_path)}
               target="_blank"
               rel="noopener noreferrer"
             >
