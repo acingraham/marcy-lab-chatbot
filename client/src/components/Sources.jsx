@@ -8,7 +8,6 @@ function groupBySource(sources) {
       grouped.set(s.source_path, {
         source_path: s.source_path,
         title: s.title,
-        topSimilarity: s.similarity,
         headings: [],
       });
       order.push(s.source_path);
@@ -16,9 +15,6 @@ function groupBySource(sources) {
     const g = grouped.get(s.source_path);
     if (s.heading && !g.headings.includes(s.heading)) {
       g.headings.push(s.heading);
-    }
-    if (s.similarity > g.topSimilarity) {
-      g.topSimilarity = s.similarity;
     }
   }
   return order.map((p) => grouped.get(p));
@@ -35,20 +31,14 @@ export default function Sources({ sources }) {
       <ul>
         {groups.map((g) => (
           <li key={g.source_path} className="sources__chapter">
-            <div className="sources__chapter-row">
-              <span className="similarity">{(g.topSimilarity * 100).toFixed(0)}%</span>
-              <a
-                className="sources__title"
-                href={toGitbookUrl(g.source_path)}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {g.title || g.source_path.replace(/\.md$/i, '')}
-              </a>
-              <span className="sources__path">
-                {g.source_path.replace(/\.md$/i, '')}
-              </span>
-            </div>
+            <a
+              className="sources__title"
+              href={toGitbookUrl(g.source_path)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {g.title || g.source_path.replace(/\.md$/i, '')}
+            </a>
             {g.headings.length > 0 ? (
               <ul className="sources__headings">
                 {g.headings.map((h, i) => (
