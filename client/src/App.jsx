@@ -15,7 +15,7 @@ const HISTORY_TURNS = 6;
 
 function loadStoredMessages() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -40,7 +40,7 @@ function ChatApp() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     } catch {
       // Quota exceeded or storage disabled; ignore.
     }
@@ -54,7 +54,7 @@ function ChatApp() {
     setMessages([]);
     setError(null);
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(STORAGE_KEY);
     } catch {
       // ignore
     }
