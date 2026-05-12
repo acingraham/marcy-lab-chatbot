@@ -49,24 +49,39 @@ latencies — lives at `/admin`.
 
 ## Architecture
 
+The RAG pipeline a single user question goes through. Each box maps directly to a
+function in [`server/src/rag.js`](server/src/rag.js) or
+[`server/src/routes/chat.js`](server/src/routes/chat.js).
+
 ```mermaid
 flowchart LR
-  User((User)) <--> Client[React + Vite]
-  Client <-->|POST /api/chat<br/>SSE response| Server[Express]
-  Server <-->|embed · rewrite ·<br/>generate · follow-ups| OpenAI[OpenAI API]
-  Server <-->|cosine search<br/>chat_logs| DB[(Postgres + pgvector)]
+  Q([User question<br/>+ recent history]) --> R[Rewrite if history<br/>gpt-4o-mini]
+  R --> E[Embed query<br/>text-embedding-3-small]
+  E --> S[(pgvector cosine search<br/>top-5 chunks)]
+  S --> G{Top similarity<br/>≥ 0.3?}
+  G -->|no| X[Canonical refusal]
+  G -->|yes| A[Stream answer + 3 follow-ups<br/>gpt-4o-mini]
+  A --> L[(chat_logs)]
+  X --> L
 ```
 
-Four moving parts. The Express server is where the RAG pipeline lives — it calls
-OpenAI four ways (embedding the query, rewriting follow-ups into standalone form,
-generating the streamed answer, generating suggested follow-up questions), and it
-calls Postgres two ways (cosine-similarity search over `document_chunks`, then
-`INSERT` into `chat_logs`). Responses come back to the browser as a Server-Sent
-Events stream so tokens appear as they're produced. The full step-by-step is in
-[What the app does](#what-the-app-does) above.
+Three properties worth pointing at:
 
-**Single deploy target.** In production, Express serves both the API and the built React
-bundle on one port. No CORS, one URL, one Render service.
+- **Rewriting before embedding** is what makes multi-turn work. *"How is that
+  different from props?"* is meaningless to a vector lookup; rewritten to *"How is
+  React Context different from props?"* it retrieves the right chapter.
+- **The refusal gate is architectural, not just a prompt rule.** Off-topic
+  questions never reach the LLM — saves money and gives a deterministic answer.
+- **Every request lands in `chat_logs`** — answered or refused, with retrieved
+  sources and latency — so retrieval quality is measurable rather than vibes.
+
+The corpus itself was built offline by `npm run ingest`, which walks the cloned
+Marcy curriculum repo, chunks each markdown file (see
+[How ingestion works](#how-ingestion-works)), embeds each chunk with
+`text-embedding-3-small`, and writes one row per chunk into `document_chunks`.
+
+**Single deploy target.** In production, Express serves both the API and the built
+React bundle on one port — no CORS, one URL, one Render service.
 
 ---
 
