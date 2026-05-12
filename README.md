@@ -50,37 +50,20 @@ latencies — lives at `/admin`.
 ## Architecture
 
 ```mermaid
-sequenceDiagram
-  actor User
-  participant UI as React + Vite
-  participant API as Express
-  participant DB as Postgres + pgvector
-  participant LLM as OpenAI
-
-  User->>UI: types question
-  UI->>API: POST /api/chat<br/>{ message, history }
-  opt history is non-empty
-    API->>LLM: rewrite to standalone query<br/>(gpt-4o-mini)
-    LLM-->>API: rewritten query
-  end
-  API->>LLM: embed query<br/>(text-embedding-3-small)
-  LLM-->>API: 1536-dim vector
-  API->>DB: cosine similarity<br/>SELECT ... ORDER BY embedding <=> $1
-  DB-->>API: top-5 chunks + scores
-  alt top similarity < 0.3
-    API-->>UI: SSE: refused + canonical message
-  else
-    API-->>UI: SSE: sources event
-    API->>LLM: chat completion (stream=true)<br/>(gpt-4o-mini)
-    LLM-->>API: token stream
-    API-->>UI: SSE: token events
-    API->>LLM: generate 3 follow-ups<br/>(gpt-4o-mini)
-    LLM-->>API: questions
-    API-->>UI: SSE: follow_ups event
-  end
-  API-->>UI: SSE: done
-  API->>DB: INSERT chat_logs<br/>(query, response, sources, latency, refused)
+flowchart LR
+  User((User)) <--> Client[React + Vite]
+  Client <-->|POST /api/chat<br/>SSE response| Server[Express]
+  Server <-->|embed · rewrite ·<br/>generate · follow-ups| OpenAI[OpenAI API]
+  Server <-->|cosine search<br/>chat_logs| DB[(Postgres + pgvector)]
 ```
+
+Four moving parts. The Express server is where the RAG pipeline lives — it calls
+OpenAI four ways (embedding the query, rewriting follow-ups into standalone form,
+generating the streamed answer, generating suggested follow-up questions), and it
+calls Postgres two ways (cosine-similarity search over `document_chunks`, then
+`INSERT` into `chat_logs`). Responses come back to the browser as a Server-Sent
+Events stream so tokens appear as they're produced. The full step-by-step is in
+[What the app does](#what-the-app-does) above.
 
 **Single deploy target.** In production, Express serves both the API and the built React
 bundle on one port. No CORS, one URL, one Render service.
