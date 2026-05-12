@@ -432,21 +432,75 @@ marcy-lab-chatbot/
 
 ## Future work
 
-The MVP intentionally cut a number of features to ship in a day. Ranked roughly by
-value-per-effort:
+Honest list of what'd come next, organized by where the work lives.
 
-- **Incremental ingestion**: hash each chunk's content and skip unchanged hashes on
-  re-ingest. Today the script truncates and re-embeds everything. Cheap for ~1.3k
-  chunks; matters at 10k+.
-- **Reranking**: after retrieving the top 10 by cosine similarity, use a cross-encoder
-  or an LLM-based reranker to re-order them by direct relevance to the question.
-  Improves precision when the top embeddings are all roughly similar but not all
-  equally on-point.
-- **Hybrid retrieval**: combine vector search with BM25 keyword matching. Vector
-  search captures meaning; BM25 catches exact-token queries (function names, error
-  messages). Reciprocal rank fusion combines them.
-- **ANN index**: once the corpus passes ~10k chunks, restore an `ivfflat` or `hnsw`
-  index. Sequential scan is fine at the current size and produces exact results.
+### Production hardening
+
+- **Jailbreak resistance** beyond the similarity gate — an input-side classifier
+  or a separate safety-LLM pass for adversarial prompts. Today the architectural
+  refusal gate plus the system prompt catch the obvious cases, but a determined
+  attacker would eventually get through.
+- **Auth on `/admin`** and **rate limiting on `/api/chat`**. The logs endpoint is
+  open today; the chat endpoint will happily serve every request until the OpenAI
+  bill arrives.
+- **Usage alerts** before hitting OpenAI spend caps or Neon compute caps, so a
+  viral moment doesn't surprise you on a Sunday.
+- **Error monitoring** (Sentry or similar) — today server errors only land in
+  Render's log stream and nowhere searchable.
+
+### User accounts & personalization
+
+- **Auth + per-user conversation history** so chats persist across devices and
+  sessions instead of only within a single browser tab.
+- **Multiple saved conversations** — a ChatGPT-style sidebar of past chats.
+- **Response feedback** — thumbs up/down on each answer and the ability to
+  highlight what was helpful, so retrieval and prompt tuning have ground truth.
+
+### Content & ingestion
+
+- **Incremental ingestion** with content hashing: pre-hash artifact scrubbing
+  (strip GitBook noise, normalize whitespace), SHA256 each chunk, skip unchanged
+  hashes on re-ingest. Cheap at 1.3k chunks; matters at 10k+, and matters more
+  once auto re-ingestion is wired up.
+- **Handle moves, renames, and deletions** in the curriculum repo — drop the
+  corresponding chunks when a source file disappears, follow renames so we don't
+  re-embed unchanged content under a new path.
+- **Auto re-ingest on curriculum updates** via a GitHub webhook on
+  `marcy-curriculum-docs` that triggers ingest after a merge to main.
+- **Multimodal content** — many chapters lean on diagrams and screenshots; OCR
+  plus a vision model in the pipeline would let questions reference them.
+- **Expand the eval suite** to 30–50 cases covering edge topics (near-duplicate
+  lessons, ambiguous questions, deprecated APIs) for stronger regression coverage.
+
+### Observability & evaluation
+
+- **A real admin dashboard** (today it's a basic JSON-backed table) — filter by
+  refusal status, sort by latency, drill into retrieved chunks, mark answers as
+  good/bad.
+- **Prompt template versioning** — every `chat_logs` row carries the
+  prompt-version hash that produced it, so prompt iteration becomes a measurable
+  experiment instead of vibes.
+- **Aggregate metrics**: refusal rate over time, average latency, top retrieved
+  chapters, queries with low top similarity (curriculum gaps).
+
+### Product / UX
+
+- **Inline citations** woven into the answer text — footnote-style refs that link
+  to the retrieved chapter at the exact claim — in addition to the Related
+  Chapters panel.
+- **Stop-generation** mid-stream when the user realizes they asked the wrong
+  thing.
+- **Mobile-friendly layout** — today everything's tuned on desktop. The sticky
+  composer with the on-screen keyboard up needs work.
+- **Copy answer / copy prompt** buttons and a share link for a single exchange,
+  so a student can drop an answer into their notes or send it to a peer.
+
+### Performance & cost
+
+- **Result caching** keyed on the rewritten query — students ask the same
+  questions at the same points in the cohort, so cache hits are real money.
+- **Multi-model routing** — a small classifier picks `gpt-4o-mini` for typical
+  questions and a stronger model for harder ones, balancing cost against quality.
 
 ---
 
