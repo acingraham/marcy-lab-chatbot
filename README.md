@@ -129,6 +129,9 @@ git clone --depth 1 \
 
 # Embed and ingest all chunks (~2 min, costs ~$0.01)
 npm run ingest
+
+# (optional) verify retrieval quality end-to-end
+npm run eval
 ```
 
 ### Running in dev
@@ -160,9 +163,11 @@ Open **http://localhost:3000**.
 each file (see below), embeds the chunks in batches of 64 with
 `text-embedding-3-small`, and inserts them into `document_chunks` with their embeddings.
 
-The current corpus produces **~1,500 chunks** from 173 markdown files. Ingestion is
-destructive on each run (`TRUNCATE document_chunks RESTART IDENTITY`) — incremental
-ingestion is listed under [Future work](#future-work).
+The current corpus produces **1,291 chunks** from ~170 markdown files (after
+filtering `*-old` directories and `deprecated-*` files so retrieval doesn't surface
+duplicate copies of the same lesson). Ingestion is destructive on each run
+(`TRUNCATE document_chunks RESTART IDENTITY`) — incremental ingestion is listed under
+[Future work](#future-work).
 
 ### Chunking strategy
 
@@ -187,9 +192,9 @@ Stats from the current ingest:
 
 | Metric | Value |
 | ------ | ----- |
-| Chunks generated | 1,476 |
-| Median tokens / chunk | ~322 |
-| 95th percentile | ~864 |
+| Chunks generated | 1,291 |
+| Median tokens / chunk | ~331 |
+| 95th percentile | ~872 |
 | Max | 1,008 |
 
 ---
@@ -211,7 +216,7 @@ LIMIT 5;
 `1 - distance` gives cosine similarity in [-1, 1] (in practice ~[0, 1] for OpenAI
 embeddings).
 
-**No ANN index** is created. For ~1.5k vectors a sequential scan is ~30ms and exact.
+**No ANN index** is created. For ~1.3k vectors a sequential scan is ~30ms and exact.
 An earlier version of this project used an `ivfflat` index with `probes = 1` and
 returned bad approximations that missed the true top-k; the index was removed. The
 schema migration includes a comment documenting when to add an index back (corpus
@@ -229,6 +234,34 @@ pass and let the system prompt handle the gray area (see below).
 
 ---
 
+## Verifying retrieval quality
+
+`npm run eval` runs a small canonical test suite against the live retrieval
+pipeline. 13 relevance cases (question + expected substring that must appear in a
+top-5 `source_path` or heading) and 4 refusal cases (off-topic queries that should
+land below the 0.3 threshold). Exits nonzero on any failure so it can be wired into
+CI later.
+
+Current pass rate: **17/17**. Average top similarity is **0.592** on relevant
+questions and **0.245** on refusal cases — a **0.347 gap** that's the quantitative
+justification for the 0.3 refusal threshold.
+
+```
+=== Summary ===
+  17 passed, 0 failed of 17
+  Avg top similarity (relevance): 0.592
+  Avg top similarity (refusal):   0.245
+  Gap (relevance − refusal):      0.347
+```
+
+The matcher checks `source_path` AND `heading` together — topics that live as
+sections inside larger files (destructuring inside `7-objects.md`, factory functions
+inside `1-intro-oop-encapsulation-this.md`, props inside `1-intro-to-react.md`) all
+count as found. What matters for retrieval quality is "did we surface the right
+content," not "did we surface a file with the topic in its name."
+
+---
+
 ## Prompt design
 
 The full system prompt lives in [`server/src/rag.js`](server/src/rag.js):
@@ -242,8 +275,12 @@ Rules:
 - If the context does not contain the answer, say so plainly — do not invent curriculum
   guidance.
 - Refuse questions unrelated to Marcy curriculum or software engineering.
-- Be beginner-friendly and concrete. Use short paragraphs and code examples when
-  helpful.
+- Lead with the concept in plain English before showing code. Use a teacher's voice —
+  explain the *why* before the *how*.
+- Prefer one well-explained example over an exhaustive checklist. Students learning a
+  topic remember a clear story better than a list of bullet points.
+- Be beginner-friendly. Use short paragraphs and inline code formatting for short
+  snippets; reserve full code blocks for examples that genuinely benefit from them.
 ```
 
 Each rule maps to a concrete failure mode:
@@ -254,6 +291,8 @@ Each rule maps to a concrete failure mode:
 | Quote Marcy terminology | Voice mismatch — students should see the same words their instructors use |
 | Don't invent guidance | The retrieved chunks may not actually contain the answer, even when retrieved |
 | Refuse unrelated questions | Second-layer off-topic defense (when retrieval gating doesn't catch the edge case) |
+| Lead with the concept; teacher's voice | Stack-overflow-style "here are 4 causes, here's code for each" reads like a checklist. A study tool should explain *why* before *how*. |
+| Prefer one example over a checklist | Same failure mode — students retain a clear story better than a bulleted list of edge cases. |
 | Beginner-friendly | The audience is students learning the material, not engineers cross-referencing it |
 
 The user message wraps the question with the retrieved context:
@@ -322,10 +361,10 @@ proof-of-concept:
 curl https://marcy-lab-chatbot.onrender.com/api/admin/logs?limit=20
 ```
 
-There's also a small React admin view at **`/admin`** that renders the logs as a
-sortable, expandable table — click any row to expand the full response plus the
-ranked retrieved sources with their similarity scores. The header shows the refusal
-rate and the average latency across the visible window.
+There's also a small React admin view at **`/admin`** that renders the logs as an
+expandable table — click any row to expand the full response plus the ranked
+retrieved sources with their similarity scores. The header shows the refusal rate
+and the average latency across the visible window.
 
 These logs are intended for evaluating retrieval quality (which queries returned
 low-similarity top results), identifying gaps in curriculum coverage (legitimate
@@ -360,24 +399,28 @@ marcy-lab-chatbot/
 │   ├── index.html
 │   ├── vite.config.js
 │   └── src/
-│       ├── App.jsx          Chat shell, suggestions, transcript
-│       ├── api.js           fetch wrapper for /api/chat
-│       ├── main.jsx
+│       ├── App.jsx          Chat shell, transcript, /admin route switch
+│       ├── api.js           SSE stream reader for /api/chat
+│       ├── main.jsx         React root
 │       ├── styles.css
+│       ├── lib/
+│       │   └── docs.js      GitBook URL + heading-slug helpers
 │       └── components/
+│           ├── AdminView.jsx     /admin log viewer
 │           ├── ChatMessage.jsx
-│           └── Sources.jsx
+│           └── Sources.jsx       Grouped Related Chapters
 ├── server/
 │   ├── migrations/
 │   │   └── 001_init.sql     pgvector + document_chunks + chat_logs
 │   ├── scripts/
-│   │   └── migrate.js       runs all .sql files in /migrations
+│   │   ├── migrate.js       runs all .sql files in /migrations
+│   │   └── eval.js          retrieval quality eval suite
 │   └── src/
 │       ├── chunker.js       markdown-aware chunking
 │       ├── db.js            pg Pool
 │       ├── ingest.js        chunk → embed → insert pipeline
 │       ├── index.js         Express app entry
-│       ├── rag.js           embed, retrieve, prompt, generate
+│       ├── rag.js           embed, retrieve, rewrite, generate, follow-ups
 │       └── routes/
 │           └── chat.js      POST /api/chat, GET /api/admin/logs
 ├── .env.example
