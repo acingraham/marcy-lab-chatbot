@@ -37,6 +37,7 @@ function ChatApp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const scrollRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -50,6 +51,12 @@ function ChatApp() {
     scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
+  useEffect(() => {
+    if (!loading) {
+      inputRef.current?.focus();
+    }
+  }, [loading]);
+
   function clearConversation() {
     setMessages([]);
     setError(null);
@@ -58,6 +65,7 @@ function ChatApp() {
     } catch {
       // ignore
     }
+    inputRef.current?.focus();
   }
 
   async function submit(text) {
@@ -179,6 +187,7 @@ function ChatApp() {
         }}
       >
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
