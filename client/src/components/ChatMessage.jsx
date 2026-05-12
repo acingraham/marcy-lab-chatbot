@@ -6,7 +6,6 @@ export default function ChatMessage({ message, onFollowUp }) {
   const { role, content, sources, refused, followUps } = message;
   return (
     <div className={`message message--${role} ${refused ? 'message--refused' : ''}`}>
-      <div className="message__role">{role === 'user' ? 'You' : 'Assistant'}</div>
       <div className="message__content">
         {role === 'user' ? (
           content

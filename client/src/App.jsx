@@ -163,7 +163,6 @@ function ChatApp() {
 
         {loading && messages[messages.length - 1]?.role === 'user' ? (
           <div className="message message--assistant">
-            <div className="message__role">Assistant</div>
             <div className="message__content typing">Thinking…</div>
           </div>
         ) : null}
