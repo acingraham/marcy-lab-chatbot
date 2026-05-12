@@ -136,7 +136,7 @@ function ChatApp() {
         <div className="app__header-row">
           <div>
             <h1>Marcy Lab Study Assistant</h1>
-            <p>Ask anything covered by the Marcy curriculum.</p>
+            <p>Ask anything covered by the Marcy curriculum</p>
           </div>
           {messages.length > 0 ? (
             <button
