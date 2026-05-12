@@ -15,7 +15,7 @@ takes ~30s to wake the service — subsequent requests are fast.)*
 ## What the app does
 
 To the user, the experience is a normal chatbot. Under the hood, every message goes
-through a six-step pipeline:
+through a seven-step pipeline:
 
 1. **Rewrite** the query if there's conversation history. A short `gpt-4o-mini` call
    resolves follow-up references like *"how is that different from props?"* into a
@@ -31,12 +31,19 @@ through a six-step pipeline:
    recent conversation history as context and a system prompt that constrains the
    model to Marcy curriculum content. Tokens are streamed back over Server-Sent
    Events as they're produced.
-6. **Log** the query, response, retrieved chunks (with similarity scores), latency, and
+6. **Suggest follow-ups**: after the streamed answer finishes, a second short
+   `gpt-4o-mini` call generates three follow-up questions a student might naturally
+   ask next. They appear as clickable chips under the answer; tapping one resubmits
+   it through the same pipeline.
+7. **Log** the query, response, retrieved chunks (with similarity scores), latency, and
    refusal flag to a `chat_logs` table after the stream completes.
 
-The UI renders answers as markdown (bold, lists, syntax-highlighted code blocks) and
-shows each answer's sources in a collapsible panel with similarity scores so the user
-can see exactly which Marcy docs informed the response.
+The UI renders answers as markdown (bold, lists, syntax-highlighted code blocks).
+Under each answer, a collapsible **Related Chapters** panel groups the retrieved
+sources by chapter: the chapter title links to the corresponding page on Marcy's
+GitBook, and the section-level headings beneath deep-link to the matching anchor on
+that page. The engineering view of the same data — paths, similarity scores,
+latencies — lives at `/admin`.
 
 ---
 
