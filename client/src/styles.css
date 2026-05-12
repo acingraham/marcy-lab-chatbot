@@ -207,6 +207,22 @@ html, body, #root {
   background: rgba(56, 189, 248, 0.18);
   color: var(--accent);
 }
+.sources__headings {
+  margin: 4px 0 6px;
+  padding-left: 8px;
+  list-style: none;
+}
+.sources__headings li {
+  margin: 2px 0 2px 12px;
+  position: relative;
+  color: var(--fg-muted);
+  font-size: 12px;
+}
+.sources__headings li::before {
+  content: '·';
+  position: absolute;
+  left: -10px;
+}
 
 .follow-ups {
   margin-top: 12px;
